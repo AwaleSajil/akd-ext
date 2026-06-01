@@ -15,6 +15,14 @@ def s2_api_key() -> str | None:
     return (os.getenv("SEMANTIC_SCHOLAR_API_KEY") or "").strip() or None
 
 
+def openai_api_key() -> str | None:
+    return (os.getenv("OPENAI_API_KEY") or "").strip() or None
+
+
+def analyzer_model() -> str:
+    return (os.getenv("ANALYZER_MODEL") or "gpt-5.5").strip()
+
+
 def unpaywall_email() -> str:
     return (os.getenv("UNPAYWALL_EMAIL") or "user@example.com").strip()
 

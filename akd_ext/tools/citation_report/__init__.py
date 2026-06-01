@@ -1,8 +1,12 @@
 """Citation-report tools for akd-ext.
 
-A pipeline of pure-IO tools (no LLM inside any tool) that, given a seed paper, fetch
-its citing papers, download their PDFs, and persist per-paper + consolidated reports in
-S3. The LLM steps (target profiling + per-citation analysis) live in the agent layer.
+A pipeline that, given a seed paper, fetches its citing papers, downloads their PDFs,
+and persists per-paper + consolidated reports in S3. Most tools are pure-IO; target
+profiling lives in the agent layer.
+
+The one exception is AnalyzeCitationsTool: it folds the per-citation analysis loop and
+consolidation into a single tool that calls the LLM itself (OpenAI, in parallel), so a
+workflow can fan out over many papers in one call instead of a sequential loop.
 
 Importing this package registers every tool via the @mcp_tool decorator.
 """
@@ -53,6 +57,11 @@ from .download_link import (
     GetDownloadLinkInputSchema,
     GetDownloadLinkOutputSchema,
 )
+from .analyze import (
+    AnalyzeCitationsTool,
+    AnalyzeCitationsInputSchema,
+    AnalyzeCitationsOutputSchema,
+)
 
 __all__ = [
     "ResolvePaperTool",
@@ -65,4 +74,5 @@ __all__ = [
     "GetReportTool",
     "ConsolidateReportsTool",
     "GetDownloadLinkTool",
+    "AnalyzeCitationsTool",
 ]
