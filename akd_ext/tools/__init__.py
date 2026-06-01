@@ -1,6 +1,18 @@
 """Tools module for akd_ext."""
 
 from .dummy import DummyInputSchema, DummyOutputSchema, DummyTool
+from .citation_report import (
+    ResolvePaperTool,
+    GetCitationsTool,
+    EnrichCitationsTool,
+    DownloadPdfsTool,
+    GetSeedTextTool,
+    GetPdfTextTool,
+    SaveReportTool,
+    GetReportTool,
+    ConsolidateReportsTool,
+    GetDownloadLinkTool,
+)
 from .sde_search import (
     SDEDocument,
     SDESearchTool,
@@ -25,6 +37,16 @@ __all__ = [
     "DummyTool",
     "DummyInputSchema",
     "DummyOutputSchema",
+    "ResolvePaperTool",
+    "GetCitationsTool",
+    "EnrichCitationsTool",
+    "DownloadPdfsTool",
+    "GetSeedTextTool",
+    "GetPdfTextTool",
+    "SaveReportTool",
+    "GetReportTool",
+    "ConsolidateReportsTool",
+    "GetDownloadLinkTool",
     "SDESearchTool",
     "SDESearchToolInputSchema",
     "SDESearchToolOutputSchema",
