@@ -299,6 +299,14 @@ class S3Cache:
     def master_report_get_v2(self, target: str, version: str) -> dict | None:
         return self._get_json(self._key("reports", target, version, "_master.json"))
 
+    def report_html_put(self, target: str, version: str, html_text: str, name: str = "_report.html") -> str | None:
+        """Write a rendered HTML report to reports/{target}/{version}/{name}."""
+        if not self.enabled:
+            return None
+        key = self._key("reports", target, version, name)
+        self.upload_bytes(key, html_text.encode("utf-8"), content_type="text/html; charset=utf-8")
+        return self.s3_uri(key)
+
     def master_report_key(self, target: str, version: str) -> str:
         return self._key("reports", target, version, "_master.json")
 

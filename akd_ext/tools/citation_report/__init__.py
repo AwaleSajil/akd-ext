@@ -62,6 +62,11 @@ from .analyze import (
     AnalyzeCitationsInputSchema,
     AnalyzeCitationsOutputSchema,
 )
+from .report_html import (
+    GenerateReportTool,
+    GenerateReportInputSchema,
+    GenerateReportOutputSchema,
+)
 
 __all__ = [
     "ResolvePaperTool",
@@ -75,4 +80,5 @@ __all__ = [
     "ConsolidateReportsTool",
     "GetDownloadLinkTool",
     "AnalyzeCitationsTool",
+    "GenerateReportTool",
 ]
