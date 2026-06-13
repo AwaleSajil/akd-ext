@@ -1,0 +1,15 @@
+# Keep the build context small and avoid shipping local junk / secrets.
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+*.html
+tests/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

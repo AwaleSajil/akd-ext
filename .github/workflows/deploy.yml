@@ -1,0 +1,56 @@
+# Build the MCP server container and deploy it to AWS Lambda on every push to develop.
+#
+# Auth uses GitHub OIDC (no AWS keys stored in GitHub): the job assumes an IAM role
+# whose ARN you set as the repo variable AWS_DEPLOY_ROLE_ARN (created in Phase B).
+
+name: Deploy MCP to Lambda
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch: {}   # lets you trigger a deploy manually from the Actions tab
+
+env:
+  AWS_REGION: us-east-2
+  ECR_REPOSITORY: akd-ext-mcp
+  LAMBDA_FUNCTION: akd-ext-mcp
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          IMAGE="$REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Update Lambda to the new image
+        run: |
+          aws lambda update-function-code \
+            --function-name "$LAMBDA_FUNCTION" \
+            --image-uri "$IMAGE" \
+            --region "$AWS_REGION"
+          aws lambda wait function-updated \
+            --function-name "$LAMBDA_FUNCTION" \
+            --region "$AWS_REGION"
+          echo "Deployed $IMAGE"
