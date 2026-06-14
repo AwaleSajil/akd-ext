@@ -273,6 +273,59 @@ def render_family_chart(series_by_repo: dict[str, list[dict]], target_name: str)
     return buf.getvalue()
 
 
+def _variant_color(repo_id: str) -> str:
+    """EO repos -> red, WxC -> green, else blue (matches the master report palette)."""
+    low = repo_id.lower()
+    if "wxc" in low or "weather" in low:
+        return "tab:green"
+    if "-eo" in low or "_eo" in low or "eo-" in low or "geospatial" in low:
+        return "tab:red"
+    return "tab:blue"
+
+
+def render_repo_bar_chart(repo_id: str, rows: list[dict], repo_type: str | None = None) -> bytes | None:
+    """One bar chart for a single repo: month-end cumulative all-time downloads. PNG bytes.
+
+    Mirrors the master report's per-repo figure (one bar per month, value labels, EO/WxC
+    colouring, dataset rows hatched).
+    """
+    rows = [r for r in rows if r]
+    if not rows:
+        return None
+
+    months = [r["month"] for r in rows]
+    vals = [r["downloads_all_time"] for r in rows]
+    is_dataset = str(repo_type).lower() == "dataset"
+
+    plt.rcParams.update({"font.size": 13})
+    fig, ax = plt.subplots(figsize=(10, 5))
+    bars = ax.bar(
+        months, vals, width=0.65, color=_variant_color(repo_id), alpha=0.6,
+        hatch=("///" if is_dataset else None),
+        edgecolor=((0, 0, 0, 0.4) if is_dataset else None),
+    )
+    for b, v in zip(bars, vals):
+        ax.annotate(f"{int(v):,}", xy=(b.get_x() + b.get_width() / 2, b.get_height()),
+                    xytext=(0, 3), textcoords="offset points", ha="center",
+                    fontsize=9, fontweight="bold")
+    if vals:
+        ax.set_ylim(min(vals) * 0.5, max(vals) * 1.12)
+
+    ax.set_title(f"{repo_id} — month-end all-time downloads", fontweight="bold", fontsize=12)
+    ax.set_xlabel("Month")
+    ax.set_ylabel("All-time downloads")
+    ax.grid(True, axis="y", alpha=0.3)
+    for lbl in ax.get_xticklabels():
+        lbl.set_rotation(45)
+        lbl.set_ha("right")
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return buf.getvalue()
+
+
 def png_to_data_uri(png: bytes) -> str:
     return "data:image/png;base64," + base64.standard_b64encode(png).decode("ascii")
 
@@ -330,26 +383,41 @@ def _hf_figure_name(target_name: str) -> str:
     return f"hf_{slug}_downloads.png"
 
 
+def _repo_figure_name(repo_id: str) -> str:
+    return f"hf_{re.sub(r'[^a-z0-9]+', '_', repo_id.lower()).strip('_')}_monthly_downloads.png"
+
+
 def build_hf_section(hf: dict, target_name: str) -> tuple[str, dict[str, str]]:
     """Turn a ``get_hf_trends`` result into (hf_figures_md, figures).
 
-    ``figures`` maps {figure_name: data_uri} and the markdown references it as
-    ``figures/<figure_name>`` — the same mechanism the usage charts use (see
-    report_logic.markdown_to_html_document). When ``hf`` is not found, returns the
-    skipped-note markdown and an empty figures dict.
+    Renders ONE bar chart per matched repo (interleaved, Figure HF-1..N) — the layout of
+    the master report — followed by a summary table. ``figures`` maps {figure_name:
+    data_uri} and the markdown references each as ``figures/<figure_name>`` (the same
+    mechanism the usage charts use; see report_logic.markdown_to_html_document). When
+    ``hf`` is not found, returns the skipped-note markdown and an empty figures dict.
     """
     from .report_sections import hf_skipped_md
 
     if not hf or not hf.get("found"):
         return hf_skipped_md(), {}
 
-    fig_name = _hf_figure_name(target_name)
-    figures: dict[str, str] = {}
-    chart_uri = hf.get("chart_data_uri")
-    if chart_uri:
-        figures[fig_name] = chart_uri
-
+    monthly = hf.get("monthly") or {}
+    repos = {r["repo_id"]: r for r in hf.get("repos") or []}
     snap = hf.get("snapshot_month") or "?"
+
+    # Render one figure per repo, most-downloaded first.
+    ordered = sorted(monthly, key=lambda rid: (monthly[rid][-1]["downloads_all_time"] if monthly[rid] else 0),
+                     reverse=True)
+    figures: dict[str, str] = {}
+    repo_figs: list[tuple[str, str]] = []  # (repo_id, figure_name)
+    for rid in ordered:
+        png = render_repo_bar_chart(rid, monthly[rid], repo_type=repos.get(rid, {}).get("repo_type"))
+        if not png:
+            continue
+        fname = _repo_figure_name(rid)
+        figures[fname] = png_to_data_uri(png)
+        repo_figs.append((rid, fname))
+
     lines = [
         "## Hugging Face: model download trends (monthly)",
         "",
@@ -358,13 +426,23 @@ def build_hf_section(hf: dict, target_name: str) -> tuple[str, dict[str, str]]:
         f"calendar month; not a live API call). Latest snapshot: **{snap}**.",
         "",
     ]
-    if chart_uri:
-        lines += [f"![Hugging Face downloads: {target_name}](figures/{fig_name})", ""]
+    for i, (rid, fname) in enumerate(repo_figs, start=1):
+        lines += [
+            f"### Figure HF-{i}. `{rid}`",
+            "",
+            f"Month-by-month growth of **cumulative downloads** for **{rid}** across the snapshot "
+            "history. Spacing of months reflects how often `metrics_daily` snapshots were collected; "
+            "bar labels show the month-end totals.",
+            "",
+            f"![Monthly downloads: {rid}](figures/{fname})",
+            "",
+        ]
 
     latest = hf.get("latest") or {}
-    repos = {r["repo_id"]: r for r in hf.get("repos") or []}
     if latest:
         lines += [
+            "### Summary",
+            "",
             "| Repo | All-time downloads | Last 30d | Likes | Matched on |",
             "| --- | ---: | ---: | ---: | --- |",
         ]
