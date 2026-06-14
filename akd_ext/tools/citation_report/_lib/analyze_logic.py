@@ -109,6 +109,16 @@ async def _analyze_one(
             return {"cache_key": pdf_key, "paper_id": paper_id,
                     "status": "analyze_failed", "detail": f"{type(e).__name__}: {e}"[:160]}
 
+        # 4b. capture the citing paper's bibliographic metadata (from Semantic Scholar) into
+        # the report envelope so the consolidated master is self-contained — the report
+        # generator needs title/year/url for the year chart and the adaptation/benchmark tables.
+        report["_meta"] = {
+            **(report.get("_meta") or {}),
+            "title": cp.get("title") or "",
+            "year": cp.get("year"),
+            "url": cp.get("url") or "",
+        }
+
         # 5. persist the report to S3
         sv = await asyncio.to_thread(
             save_report, pdf_key, report, cache, seed_paper_id, version, paper_id,

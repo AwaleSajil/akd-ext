@@ -12,8 +12,9 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-# intro-style contextual mention = abstract | introduction | related_work | appendix only.
-EARLY_CONTEXT_SECTIONS = frozenset({"abstract", "introduction", "related_work", "appendix"})
+# intro-style contextual mention = non-experimental sections only. Matches the analyzer's
+# TargetPresence.where_mentioned enum: intro | related_work | methods | experiments | appendix | unknown.
+EARLY_CONTEXT_SECTIONS = frozenset({"intro", "related_work", "appendix"})
 
 
 def _truthy(v: Any) -> bool | None:
@@ -55,7 +56,8 @@ def flatten_report(data: dict[str, Any]) -> dict[str, Any]:
     meta = data.get("meta") or {}
 
     usage_primary = _coerce_str(metrics.get("usage_type_primary") or report.get("usage_type")).lower() or "unclear"
-    where = metrics.get("prithvi_presence") or {}
+    # Analyzer schema (schemas.py) names this target_presence; older corpora used prithvi_presence.
+    where = metrics.get("target_presence") or metrics.get("prithvi_presence") or {}
     where_list = [_coerce_str(x).lower() for x in (where.get("where_mentioned") or []) if _coerce_str(x)]
 
     ti = metrics.get("training_interaction") or {}
@@ -65,7 +67,8 @@ def flatten_report(data: dict[str, Any]) -> dict[str, Any]:
     finetune_present = bool(ft.get("present")) if isinstance(ft.get("present"), bool) else _truthy(ft.get("present"))
 
     ev = metrics.get("evaluation") or {}
-    benchmarked_vs = _truthy(ev.get("benchmarked_against_prithvi"))
+    # Analyzer schema renamed this to benchmarked_against_target (+ target_compared_to_others).
+    benchmarked_vs = _truthy(ev.get("benchmarked_against_target")) or _truthy(ev.get("benchmarked_against_prithvi"))
     benches = report.get("benchmarks") if isinstance(report.get("benchmarks"), list) else []
 
     has_structured_benchmark = False
@@ -109,7 +112,9 @@ def flatten_report(data: dict[str, Any]) -> dict[str, Any]:
     if ds:
         downstream.append(f"dataset:{ds}")
     for x in metrics.get("downstream_tasks") or []:
-        s = _coerce_str(x)
+        # Analyzer schema makes these DownstreamTask dicts {task, dataset, modality, notes};
+        # older corpora used bare strings. Pull the task label either way.
+        s = _coerce_str(x.get("task")) if isinstance(x, dict) else _coerce_str(x)
         if s and s not in downstream:
             downstream.append(s)
 
