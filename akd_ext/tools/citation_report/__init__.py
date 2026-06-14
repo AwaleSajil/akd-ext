@@ -67,6 +67,11 @@ from .report_html import (
     GenerateReportInputSchema,
     GenerateReportOutputSchema,
 )
+from .hf_trends import (
+    GetHfTrendsTool,
+    GetHfTrendsInputSchema,
+    GetHfTrendsOutputSchema,
+)
 
 __all__ = [
     "ResolvePaperTool",
@@ -81,4 +86,5 @@ __all__ = [
     "GetDownloadLinkTool",
     "AnalyzeCitationsTool",
     "GenerateReportTool",
+    "GetHfTrendsTool",
 ]

@@ -129,11 +129,19 @@ def generate_report_io(
     objective: str = DEFAULT_OBJECTIVE,
     store: bool = True,
     html_name: str = "_report.html",
+    target: dict[str, Any] | None = None,
+    include_hf_trends: bool = False,
 ) -> dict[str, Any]:
     """Load master from S3, render the HTML report, optionally store it back to S3.
 
+    When ``include_hf_trends`` and a ``target`` are given, the Hugging Face download-trend
+    section is populated by matching the target against the metrics_daily snapshots; any
+    failure there is swallowed (the section degrades to a skipped note) so HF never breaks
+    the core report.
+
     Output: {status, seed_paper_id, version, title, total_papers, n_errors, html_s3_uri,
-    counts_by_usage_type, message}. status: "ok" | "no_seed" | "no_master" | "error".
+    counts_by_usage_type, hf_found, message}. status: "ok" | "no_seed" | "no_master" |
+    "error".
     """
     if not cache.enabled:
         return {"status": "error", "message": "S3 is required to generate the report"}
@@ -152,9 +160,23 @@ def generate_report_io(
             ),
         }
 
+    hf_figures_md: str | None = None
+    hf_figures: dict[str, str] | None = None
+    hf_found = False
+    if include_hf_trends and target:
+        try:
+            from .hf_trends_logic import S3Reader, build_hf_section, get_hf_trends
+
+            hf = get_hf_trends(target, S3Reader(cache))
+            hf_found = bool(hf.get("found"))
+            hf_figures_md, hf_figures = build_hf_section(hf, str(target.get("name") or "Target"))
+        except Exception:  # never let HF break the core report
+            hf_figures_md, hf_figures, hf_found = None, None, False
+
     source_desc = f"Consolidated master JSON (seed {seed_paper_id}, version {version})"
     html_doc, summary = render_report_html(
         master, title=title, objective=objective, source_desc=source_desc,
+        hf_figures_md=hf_figures_md, hf_figures=hf_figures,
     )
 
     html_s3_uri = None
@@ -171,5 +193,6 @@ def generate_report_io(
         "counts_by_usage_type": summary.get("usage_type_primary_counts") or {},
         "html_s3_uri": html_s3_uri,
         "html_bytes": len(html_doc.encode("utf-8")),
+        "hf_found": hf_found,
         "message": None,
     }

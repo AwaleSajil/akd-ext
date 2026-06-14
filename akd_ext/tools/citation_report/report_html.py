@@ -25,6 +25,14 @@ class GenerateReportInputSchema(InputSchema):
     title: str = Field(default=DEFAULT_TITLE, description="Report title / cover heading.")
     objective: str = Field(default=DEFAULT_OBJECTIVE, description="Objective paragraph for the cover (markdown).")
     store: bool = Field(default=True, description="Write the HTML to S3 (reports/{seed}/{version}/_report.html).")
+    include_hf_trends: bool = Field(
+        default=False,
+        description="Populate the Hugging Face download-trends section (needs `target`; reads HF metrics from S3).",
+    )
+    target: dict | None = Field(
+        default=None,
+        description="Profiled target {name, aliases, ...} used to match HF repos. Required when include_hf_trends.",
+    )
 
 
 class GenerateReportOutputSchema(OutputSchema):
@@ -39,6 +47,7 @@ class GenerateReportOutputSchema(OutputSchema):
     counts_by_usage_type: dict = Field(default_factory=dict, description="Paper counts per usage_type_primary.")
     html_s3_uri: str | None = Field(default=None, description="S3 URI of the HTML (pass to get_download_link).")
     html_bytes: int = Field(default=0, description="Size of the rendered HTML in bytes.")
+    hf_found: bool = Field(default=False, description="Whether the HF download-trends section was populated.")
     message: str | None = Field(default=None, description="Error / status detail, if any.")
 
 
@@ -65,6 +74,8 @@ class GenerateReportTool(BaseTool[GenerateReportInputSchema, GenerateReportOutpu
             title=params.title,
             objective=params.objective,
             store=params.store,
+            target=params.target,
+            include_hf_trends=params.include_hf_trends,
         )
         return GenerateReportOutputSchema(
             status=r.get("status", "error"),
@@ -76,5 +87,6 @@ class GenerateReportTool(BaseTool[GenerateReportInputSchema, GenerateReportOutpu
             counts_by_usage_type=r.get("counts_by_usage_type", {}) or {},
             html_s3_uri=r.get("html_s3_uri"),
             html_bytes=r.get("html_bytes", 0),
+            hf_found=r.get("hf_found", False),
             message=r.get("message"),
         )

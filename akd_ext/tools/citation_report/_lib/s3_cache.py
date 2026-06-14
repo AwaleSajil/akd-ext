@@ -197,6 +197,44 @@ class S3Cache:
     def citation_cache_uri(self, paper_id: str) -> str:
         return self.s3_uri(self._citation_key(paper_id))
 
+    # ── hugging face metrics (read-only) ──────────────────────────────────────
+    # Daily snapshot CSVs uploaded out-of-band under
+    #   {prefix}/Hugging_Face_Metrics/metrics_daily/YYYY/MM/<ts>/hf_downloads_last_month_*.csv
+    # kinds: all_repos | models_<org> | datasets_<org>. We only read them.
+
+    def _hf_metrics_prefix(self) -> str:
+        return self._key("Hugging_Face_Metrics", "metrics_daily") + "/"
+
+    def hf_list_snapshot_keys(self, kind: str, org: str | None = None) -> list[str]:
+        """Keys of every snapshot CSV of the given kind (and org for models/datasets)."""
+        if not self.enabled:
+            return []
+        if kind == "all_repos":
+            needle = "hf_downloads_last_month_all_repos_"
+        else:
+            needle = f"hf_downloads_last_month_{kind}_{org}_"
+        prefix = self._hf_metrics_prefix()
+        keys: list[str] = []
+        token = None
+        while True:
+            kw = {"Bucket": self.bucket, "Prefix": prefix}
+            if token:
+                kw["ContinuationToken"] = token
+            resp = self.client.list_objects_v2(**kw)
+            for obj in resp.get("Contents", []):
+                name = obj["Key"].rsplit("/", 1)[-1]
+                if name.startswith(needle) and name.endswith(".csv"):
+                    keys.append(obj["Key"])
+            if resp.get("IsTruncated"):
+                token = resp.get("NextContinuationToken")
+            else:
+                break
+        return keys
+
+    def hf_read_csv(self, key: str) -> bytes:
+        """Raw bytes of one snapshot CSV (caller parses with pandas)."""
+        return self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+
     # ── pdfs ──────────────────────────────────────────────────────────────────
 
     def _pdf_key(self, cache_key: str) -> str:
