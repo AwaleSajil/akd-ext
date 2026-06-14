@@ -9,10 +9,16 @@ AWS credentials are taken from the Lambda execution role automatically (boto3's
 default chain), so NO AWS_* key env vars should be set on the function.
 
 Access control: if the env var ``MCP_AUTH_TOKEN`` is set, every HTTP request must
-carry ``Authorization: Bearer <that token>`` or it is rejected with 401. This lets
-the Function URL be public (a plain URL clients hit with a token), while the server
-itself stays closed. If the var is unset, no check is applied (useful behind
-IAM-signed access during setup).
+present that token, either as ``Authorization: Bearer <token>`` or as the custom
+header ``X-MCP-Token: <token>``; otherwise it is rejected with 401. Two headers are
+accepted on purpose:
+
+  - ``Authorization: Bearer`` is the standard MCP-client form, used once the
+    Function URL is public.
+  - ``X-MCP-Token`` avoids the ``Authorization`` header, so the token can coexist
+    with AWS IAM (SigV4) request signing, which also uses ``Authorization``.
+
+If the var is unset, no check is applied.
 """
 
 import hmac
@@ -36,13 +42,18 @@ class BearerAuthASGI:
 
     def __init__(self, app, token: str):
         self.app = app
-        self.expected = f"Bearer {token}".encode()
+        self.expected_auth = f"Bearer {token}".encode()
+        self.expected_token = token.encode()
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
             headers = dict(scope.get("headers") or [])
-            provided = headers.get(b"authorization", b"")
-            if not hmac.compare_digest(provided, self.expected):
+            authorized = hmac.compare_digest(
+                headers.get(b"authorization", b""), self.expected_auth
+            ) or hmac.compare_digest(
+                headers.get(b"x-mcp-token", b""), self.expected_token
+            )
+            if not authorized:
                 await send({
                     "type": "http.response.start",
                     "status": 401,
