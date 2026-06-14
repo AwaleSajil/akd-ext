@@ -27,11 +27,19 @@ class GenerateReportInputSchema(InputSchema):
     store: bool = Field(default=True, description="Write the HTML to S3 (reports/{seed}/{version}/_report.html).")
     include_hf_trends: bool = Field(
         default=False,
-        description="Populate the Hugging Face download-trends section (needs `target`; reads HF metrics from S3).",
+        description="Build the Hugging Face download-trends section inline (needs `target`; reads HF metrics from S3).",
     )
     target: dict | None = Field(
         default=None,
         description="Profiled target {name, aliases, ...} used to match HF repos. Required when include_hf_trends.",
+    )
+    hf_figures_md: str | None = Field(
+        default=None,
+        description="Pre-built HF section markdown from a prior get_hf_trends call. Takes precedence over include_hf_trends.",
+    )
+    hf_figures: dict | None = Field(
+        default=None,
+        description="{figure_name: data_uri} from get_hf_trends, referenced by hf_figures_md.",
     )
 
 
@@ -76,6 +84,8 @@ class GenerateReportTool(BaseTool[GenerateReportInputSchema, GenerateReportOutpu
             store=params.store,
             target=params.target,
             include_hf_trends=params.include_hf_trends,
+            hf_figures_md=params.hf_figures_md,
+            hf_figures=params.hf_figures,
         )
         return GenerateReportOutputSchema(
             status=r.get("status", "error"),

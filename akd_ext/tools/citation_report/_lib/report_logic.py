@@ -131,13 +131,18 @@ def generate_report_io(
     html_name: str = "_report.html",
     target: dict[str, Any] | None = None,
     include_hf_trends: bool = False,
+    hf_figures_md: str | None = None,
+    hf_figures: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Load master from S3, render the HTML report, optionally store it back to S3.
 
-    When ``include_hf_trends`` and a ``target`` are given, the Hugging Face download-trend
-    section is populated by matching the target against the metrics_daily snapshots; any
-    failure there is swallowed (the section degrades to a skipped note) so HF never breaks
-    the core report.
+    Two ways to populate the Hugging Face download-trend section:
+      - Pre-built: pass ``hf_figures_md`` (+ ``hf_figures``) from a prior get_hf_trends
+        call. Takes precedence; this is the "separate step" path.
+      - Inline: pass ``include_hf_trends=True`` and a ``target``; the section is built here
+        by matching the target against the metrics_daily snapshots.
+    Either way any failure is swallowed (the section degrades to a skipped note) so HF
+    never breaks the core report.
 
     Output: {status, seed_paper_id, version, title, total_papers, n_errors, html_s3_uri,
     counts_by_usage_type, hf_found, message}. status: "ok" | "no_seed" | "no_master" |
@@ -160,10 +165,9 @@ def generate_report_io(
             ),
         }
 
-    hf_figures_md: str | None = None
-    hf_figures: dict[str, str] | None = None
-    hf_found = False
-    if include_hf_trends and target:
+    # Pre-built section (separate get_hf_trends step) wins; else build it inline.
+    hf_found = bool(hf_figures)
+    if hf_figures_md is None and include_hf_trends and target:
         try:
             from .hf_trends_logic import S3Reader, build_hf_section, get_hf_trends
 
